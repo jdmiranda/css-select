@@ -2,6 +2,10 @@ import * as boolbase from "boolbase";
 import type { AttributeAction, AttributeSelector } from "css-what";
 import type { CompiledQuery, InternalOptions } from "./types.js";
 
+// Note: Attribute value caching removed to avoid stale cache issues
+// when attributes are dynamically modified between queries.
+// The compiled selector cache in compile.ts provides the main performance benefit.
+
 /**
  * All reserved characters in a regex, used for escaping.
  *

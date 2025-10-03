@@ -17,6 +17,17 @@ import type {
     Predicate,
 } from "./types.js";
 
+// Compiled selector cache using WeakMap for automatic garbage collection
+const compiledSelectorCache = new WeakMap<
+    InternalSelector[][],
+    Map<string, CompiledQuery<any>>
+>();
+
+// Get cache key from options
+function getOptionsKey(options: InternalOptions<any, any>): string {
+    return `${options.xmlMode}_${options.lowerCaseTags}_${options.lowerCaseAttributeNames}_${options.quirksMode}_${options.relativeSelector}`;
+}
+
 const DESCENDANT_TOKEN: Selector = { type: SelectorType.Descendant };
 const FLEXIBLE_DESCENDANT_TOKEN: InternalSelector = {
     type: "_flexibleDescendant",
@@ -65,6 +76,21 @@ export function compileToken<Node, ElementNode extends Node>(
     options: InternalOptions<Node, ElementNode>,
     ctx?: Node[] | Node,
 ): CompiledQuery<ElementNode> {
+    // Check cache first (only if cacheResults is enabled and no context)
+    if (options.cacheResults !== false && !ctx) {
+        let optionsCache = compiledSelectorCache.get(token);
+        if (!optionsCache) {
+            optionsCache = new Map();
+            compiledSelectorCache.set(token, optionsCache);
+        }
+
+        const optionsKey = getOptionsKey(options);
+        const cached = optionsCache.get(optionsKey);
+        if (cached) {
+            return cached as CompiledQuery<ElementNode>;
+        }
+    }
+
     token.forEach(sortRules);
 
     const { context = ctx, rootFunc = boolbase.trueFunc } = options;
@@ -139,6 +165,15 @@ export function compileToken<Node, ElementNode extends Node>(
     }
 
     query.shouldTestNextSiblings = shouldTestNextSiblings;
+
+    // Store in cache if enabled and no context
+    if (options.cacheResults !== false && !ctx) {
+        const optionsCache = compiledSelectorCache.get(token);
+        if (optionsCache) {
+            const optionsKey = getOptionsKey(options);
+            optionsCache.set(optionsKey, query);
+        }
+    }
 
     return query;
 }

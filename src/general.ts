@@ -9,6 +9,30 @@ import type {
     InternalSelector,
 } from "./types.js";
 
+// Tag name cache for fast tag matching
+const tagNameCache = new Map<string, Map<any, boolean>>();
+
+function getCachedTagMatch<ElementNode>(
+    adapter: any,
+    elem: ElementNode,
+    name: string,
+): boolean {
+    let elemCache = tagNameCache.get(name);
+    if (!elemCache) {
+        elemCache = new Map();
+        tagNameCache.set(name, elemCache);
+    }
+
+    const cached = elemCache.get(elem);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    const matches = adapter.getName(elem) === name;
+    elemCache.set(elem, matches);
+    return matches;
+}
+
 /*
  * All available rules
  */
@@ -67,8 +91,16 @@ export function compileGeneralSelector<Node, ElementNode extends Node>(
                 name = name.toLowerCase();
             }
 
-            return function tag(elem: ElementNode): boolean {
-                return adapter.getName(elem) === name && next(elem);
+            // Fast path: use direct comparison without cache for simple cases
+            if (cacheResults === false) {
+                return function tag(elem: ElementNode): boolean {
+                    return adapter.getName(elem) === name && next(elem);
+                };
+            }
+
+            // Use tag name cache for better performance with repeated queries
+            return function tagCached(elem: ElementNode): boolean {
+                return getCachedTagMatch(adapter, elem, name) && next(elem);
             };
         }
 
